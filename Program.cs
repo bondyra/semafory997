@@ -12,11 +12,24 @@ namespace semafory
         }
     }
 
-    public class Semafory {
+    public enum Resource
+    {
+        Mercury,
+        Lead,
+        Sulfur
+    }
+
+    public enum Alchemist
+    {
+        AlchemistA,
+        AlchemistB,
+        AlchemistC,
+        AlchemistD
+    }
+
+    public class Semafory
+    {
         private Random r = new Random(997);
-        private const int lead = 2;
-        private const int mercury = 1;
-        private const int sulfur = 3;
 
         private int wizardCount = 1;
         private int warlockCount = 1;
@@ -26,458 +39,434 @@ namespace semafory
         private int warlockMaxSleep = 10;
         private int alchemistInterval = 5;
 
-        private Action[] alchemists;
+        private const int maxResourceCount = 2;
 
+        private Action[] alchemists;
 
         //czarodziej/czarownik wchodza i robia operacje na incie
         //czarodziej - dekrementacja, jezeli ==0, to signal *Cursed
         //czarownik - inkrementacja, jezeli ==1 to wait *Cursed, bez signal
-        private Semaphore mercuryCurseCountMutex = new Semaphore(1,1);
-        private Semaphore leadCurseCountMutex = new Semaphore(1,1);
-        private Semaphore sulfurCurseCountMutex = new Semaphore(1,1);
-        private int mercuryCurseCount = 0;
-        private int leadCurseCount = 0;
-        private int sulfurCurseCount = 0;
+        private Semaphore[] resourceCurseCountMutexes = new Semaphore[3];
+        private int[] resourceCursesCount = new int[3];
 
 
         //odpowiednie fabryki czekaja na tych mutexach
         //w przypadku signala, wchodza dalej
-        private Semaphore mercuryNotCursedMutex = new Semaphore(1,1);
-        private Semaphore leadNotCursedMutex = new Semaphore(1,1);
-        private Semaphore sulfurNotCursedMutex = new Semaphore(1,1);
-
+        private Semaphore[] resourceNotCursedMutexes = new Semaphore[3];
 
         //SYNCHRONIZACJA alchemicy - fabryki
         //alchemicy robia signal po pobraniu resource
         //fabryki czekaja na tym
-        private Semaphore mercuryFull = new Semaphore(2,2);
-        private Semaphore leadFull = new Semaphore(2,2);
-        private Semaphore sulfurFull = new Semaphore(2,2);
-
-        //fabryki po wyprodukowaniu robia signal
-        //alchemicy czekaja na tym
-        private Semaphore mercuryEmpty = new Semaphore(0,2);
-        private Semaphore leadEmpty = new Semaphore(0,2);
-        private Semaphore sulfurEmpty = new Semaphore(0,2);
-
-        private Semaphore resourcesMutex = new Semaphore(1,1);
-        private int mercuryCount = 0;
-        private int leadCount = 0;
-        private int sulfurCount = 0;
+        private Semaphore[] resourceFull = new Semaphore[3];
 
 
-        private Semaphore alchemistAMutex = new Semaphore(0,1);
-        private Semaphore alchemistBMutex = new Semaphore(0,1);
-        private Semaphore alchemistCMutex = new Semaphore(0,1);
-        private Semaphore alchemistDMutex = new Semaphore(0,1);
+        // Mutex kontrolujący atomowy dostęp do pierwiastków
+        private Semaphore resourcesMutex = new Semaphore(1, 1);
+        private int[] resourceCount = new int[3];
 
-        private Semaphore alchemistACountMutex = new Semaphore(1,1);
-        private Semaphore alchemistBCountMutex = new Semaphore(1,1);
-        private Semaphore alchemistCCountMutex = new Semaphore(1,1);
-        private Semaphore alchemistDCountMutex = new Semaphore(1,1);
-        private int alchemistACount = 0;
-        private int alchemistBCount = 0;
-        private int alchemistCCount = 0;
-        private int alchemistDCount = 0;
+        private Semaphore[] alchemistMutexes = new Semaphore[4];
+        private Semaphore[] alchemistCountMutexes = new Semaphore[4];
+        private int[] alchemistCount = new int[4];
 
-        public void run(){
-            //3 fabryki
-            new Thread(()=> {Thread.CurrentThread.IsBackground = true; FactoryWork(lead);}).Start();
-            new Thread(()=> {Thread.CurrentThread.IsBackground = true; FactoryWork(mercury);}).Start();
-            new Thread(()=> {Thread.CurrentThread.IsBackground = true; FactoryWork(sulfur);}).Start();
-            //czarodziej
-            for (int i=0;i<this.wizardCount;i++)
-                new Thread(()=> {Thread.CurrentThread.IsBackground = true; WizardWork();}).Start();
-            //czarownik
-            for (int i=0;i<this.warlockCount;i++)
-                new Thread(()=> {Thread.CurrentThread.IsBackground = true; WarlockWork();}).Start();
-            //alchemicy
-            while(true){
-                int a = r.Next(0,4);
-                System.Console.WriteLine(System.DateTime.Now+" "+"Przychodzi alchemik "+(char)(a+65)+".");
-                printAlchemics();
-                new Thread(() => {Thread.CurrentThread.IsBackground = true; alchemists[a].Invoke();}).Start();
-                int s = r.Next(1,this.alchemistInterval);
-                System.Console.WriteLine(System.DateTime.Now+" "+"Przed przyjsciem kolejnego alchemika minie "+s+" sekund.");
-                Thread.Sleep(s*1000);
-            }
-        }
 
         public Semafory()
         {
-            this.alchemists = new Action[] {
-            AlchemistAWork, AlchemistBWork, AlchemistCWork, AlchemistDWork
+            alchemists = new Action[]
+            {
+                AlchemistAWork, AlchemistBWork, AlchemistCWork, AlchemistDWork
             };
-        }
 
-        public void FactoryWork (int resource){
-            //w wiecznej petli powtarzaj:
-            System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" startuje.");
-            while(true){
-                if (resource==mercury){                    
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" sprawdza czy magazyn jest pelny.");
-                    mercuryFull.WaitOne();
-
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" czeka na zdjecie klatw.");
-                    mercuryNotCursedMutex.WaitOne();
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Dla fabryki "+resolveResourceName(resource)+" nie ma klatw, zaczyna sie produkcja.");
-                    int s = r.Next(1,this.factoryMaxSleep);
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" pracuje przez "+s+" sekund.");
-                    Thread.Sleep(s*1000);
-                    resourcesMutex.WaitOne();
-                    mercuryCount++;
-                    //fabryka sprawdza alchemikow
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka"+resolveResourceName(resource)+" sprawdza alchemikow.");
-                    checkResources();
-                    resourcesMutex.Release();
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" wyprodukowala towar.");
-                    mercuryNotCursedMutex.Release();
-                    //mercuryEmpty.Release();
-                }
-                else if (resource == lead){                    
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" sprawdza czy magazyn jest pelny.");
-                    leadFull.WaitOne();
-
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" czeka na zdjecie klatw.");
-                    leadNotCursedMutex.WaitOne();
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Dla fabryki "+resolveResourceName(resource)+" nie ma klatw, zaczyna sie produkcja.");
-                    int s = r.Next(1,this.factoryMaxSleep);
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" pracuje przez "+s+" sekund.");
-                    Thread.Sleep(s*1000);
-                    resourcesMutex.WaitOne();
-                    leadCount++;
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka"+resolveResourceName(resource)+" sprawdza alchemikow.");
-                    checkResources();
-                    resourcesMutex.Release();
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" wyprodukowala towar.");
-                    leadNotCursedMutex.Release();
-                    //leadEmpty.Release();
-                }
-                else{
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" sprawdza czy magazyn jest pelny.");
-                    sulfurFull.WaitOne();
-
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" czeka na zdjecie klatw.");
-                    sulfurNotCursedMutex.WaitOne();
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Dla fabryki "+resolveResourceName(resource)+" nie ma klatw, zaczyna sie produkcja.");
-                    int s = r.Next(1,this.factoryMaxSleep);
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" pracuje przez "+s+" sekund.");
-                    Thread.Sleep(s*1000);
-                    resourcesMutex.WaitOne();
-                    sulfurCount++;
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka"+resolveResourceName(resource)+" sprawdza alchemikow.");
-                    checkResources();
-                    resourcesMutex.Release();
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka "+resolveResourceName(resource)+" wyprodukowala towar.");
-                    sulfurNotCursedMutex.Release();
-                    //sulfurEmpty.Release();
-                }
+            for (int i = 0; i < 3; i++)
+            {
+                resourceCurseCountMutexes[i] = new Semaphore(1, 1);
+                resourceNotCursedMutexes[i] = new Semaphore(1, 1);
+                resourceFull[i] = new Semaphore(maxResourceCount, maxResourceCount);
             }
-            //poczekaj na mutexie *NotCursedMutex
-            //poczekaj na semaforze *Full
-            //spij pewien czas (fabryka pracuje)
-            //zasygnalizuj semafor *Empty
-        }
 
-        private void checkResources (){
-            bool isSulfur = sulfurCount>0;
-            bool isLead = leadCount>0;
-            bool isMercury = mercuryCount>0;
-
-            if (leadCount<0 || sulfurCount<0 || mercuryCount<0)
-                throw new Exception("Fabryka sprawdzila, zasoby < 0 !");
-
-            if (isSulfur && isLead && isMercury){
-                //D
-                alchemistDCountMutex.WaitOne();
-                if (alchemistDCount > 0){
-                    alchemistDMutex.Release();
-                    alchemistDCount--;
-                    sulfurCount--;
-                    isSulfur=sulfurCount>0;
-                    sulfurFull.Release();
-                    leadCount--;
-                    isLead = leadCount>0;
-                    leadFull.Release();
-                    mercuryCount--;
-                    isMercury=mercuryCount>0;
-                    mercuryFull.Release();
-                }
-                alchemistDCountMutex.Release();
-            }
-            if (isSulfur && isMercury){
-                //B
-                alchemistBCountMutex.WaitOne();
-                if (alchemistBCount > 0){
-                    alchemistBMutex.Release();
-                    alchemistBCount--;
-                    sulfurCount--;
-                    isSulfur=sulfurCount>0;
-                    sulfurFull.Release();
-                    mercuryCount--;
-                    isMercury=mercuryCount>0;
-                    mercuryFull.Release();
-                }
-                alchemistBCountMutex.Release();
-            }
-            if (isMercury && isLead){
-                //A
-                alchemistACountMutex.WaitOne();
-                if (alchemistACount > 0){
-                    alchemistAMutex.Release();                
-                    alchemistACount--;
-                    leadCount--;
-                    isLead = leadCount>0;
-                    leadFull.Release();
-                    mercuryCount--;
-                    isMercury=mercuryCount>0;
-                    mercuryFull.Release();
-                }
-
-                alchemistACountMutex.Release();
-            }
-            if (isLead && isSulfur){
-                //C
-                alchemistCCountMutex.WaitOne();
-                if (alchemistCCount > 0){
-                    alchemistCMutex.Release();
-                    alchemistCCount--;
-                    leadCount--;
-                    isLead = leadCount>0;
-                    leadFull.Release();
-                    sulfurCount--;
-                    isSulfur=sulfurCount>0;
-                    sulfurFull.Release();
-                }
-                alchemistCCountMutex.Release();
+            for (int i = 0; i < 4; i++)
+            {
+                alchemistMutexes[i] = new Semaphore(0, 1);
+                alchemistCountMutexes[i] = new Semaphore(1, 1);
             }
         }
 
-        private bool checkResourcesAlchemist (char type){
-            bool isSulfur = sulfurCount>0;
-            bool isLead = leadCount>0;
-            bool isMercury = mercuryCount>0;
-            if (leadCount<0 || sulfurCount<0 || mercuryCount<0)
-                throw new Exception("Alchemik sprawdzil, zasoby < 0 !");
+        public void run()
+        {
+            //3 fabryki
+            new Thread(() =>
+            {
+                Thread.CurrentThread.IsBackground = true;
+                FactoryWork(Resource.Lead);
+            }).Start();
+            new Thread(() =>
+            {
+                Thread.CurrentThread.IsBackground = true;
+                FactoryWork(Resource.Mercury);
+            }).Start();
+            new Thread(() =>
+            {
+                Thread.CurrentThread.IsBackground = true;
+                FactoryWork(Resource.Sulfur);
+            }).Start();
+            //czarodziej
+            for (int i = 0; i < this.wizardCount; i++)
+                new Thread(() =>
+                {
+                    Thread.CurrentThread.IsBackground = true;
+                    WizardWork();
+                }).Start();
+            //czarownik
+            for (int i = 0; i < this.warlockCount; i++)
+                new Thread(() =>
+                {
+                    Thread.CurrentThread.IsBackground = true;
+                    WarlockWork();
+                }).Start();
 
-            if (type=='A'){
-                if (isMercury && isLead){
-                    mercuryCount--;
-                    mercuryFull.Release();
-                    leadCount--;
-                    leadFull.Release();
-                    return true;
-                }
+
+            //alchemicy
+            while (true)
+            {
+                Alchemist a = getRandomAlchemist();
+                logEvent("Przychodzi alchemik "+ (char) ((int)a + 65) + ".");
+                printAlchemics();
+                new Thread(() =>
+                {
+                    Thread.CurrentThread.IsBackground = true;
+                    alchemists[(int)a].Invoke();
+                }).Start();
+                int s = r.Next(1, this.alchemistInterval);
+                logEvent("Przed przyjsciem kolejnego alchemika minie " + s + " sekund.");
+            
+                Thread.Sleep(s * 1000);
             }
-            else if (type=='B'){
-                if (isSulfur && isMercury){
-                    sulfurCount--;
-                    sulfurFull.Release();
-                    mercuryCount--;
-                    mercuryFull.Release();
-                    return true;
-                }
-            }
-            else if (type=='C'){
-                if (isLead && isSulfur){
-                    leadCount--;
-                    leadFull.Release();
-                    sulfurCount--;
-                    sulfurFull.Release();
-                    return true;
-                }
-            }
-            else if (type=='D'){
-                if(isLead && isSulfur && isMercury){
-                    leadCount--;
-                    leadFull.Release();
-                    sulfurCount--;
-                    sulfurFull.Release();
-                    mercuryCount--;
-                    mercuryFull.Release();
-                    return true;
-                }
-            }
-            return false;
         }
-        
-        public void WarlockWork (){
+
+        public void FactoryWork(Resource resource)
+        {
+            logEvent("Fabryka " + resolveResourceName(resource) + " startuje.");
+
+            int resourceNumber = (int) resource;
+            while (true)
+            {
+                logEvent("Fabryka " + resolveResourceName(resource) + " sprawdza czy magazyn jest pelny");
+                resourceFull[resourceNumber].WaitOne();
+
+                logEvent("Fabryka " + resolveResourceName(resource) + " czeka na zdjecie klatw");
+                resourceNotCursedMutexes[resourceNumber].WaitOne();
+
+                logEvent("Fabryka " + resolveResourceName(resource) + " nie ma klatw wiec zaczyna sie produkcja");
+                int sleepTime = r.Next(1, this.factoryMaxSleep);
+                logEvent("Fabryka " + resolveResourceName(resource) + " pracuje przez " + sleepTime + " sekund");
+                Thread.Sleep(sleepTime * 1000);
+
+                resourcesMutex.WaitOne();
+                resourceCount[resourceNumber]++;
+                logEvent("Fabryka " + resolveResourceName(resource) + " wyprodukowala towar");
+                logEvent("Fabryka " + resolveResourceName(resource) + " sprawdza alchemikow");
+                checkResources();
+                resourcesMutex.Release();
+
+                resourceNotCursedMutexes[resourceNumber].Release();
+            }
+        }
+
+        public void WarlockWork()
+        {
             //odpalany co pewien czas
             //poczekaj na mutexie od cursecount
             //zwieksz wartosc
             //jezeli == 1, wait mutex
-            while(true){
-                int which = r.Next(1,3);
-                System.Console.WriteLine(System.DateTime.Now+" "+"Czarownik wybiera fabryke: "+resolveResourceName(which));
-                if (which == mercury){
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Czarownik czeka na dostep do klatw od "+resolveResourceName(which));
-                    mercuryCurseCountMutex.WaitOne();
-                    mercuryCurseCount++;
-                    if (mercuryCurseCount==1){
-                        mercuryNotCursedMutex.WaitOne();
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Czarownik przeklina fabryke "+resolveResourceName(which)+", klatw: "+mercuryCurseCount);
-                    }
-                    mercuryCurseCountMutex.Release();
+            while (true)
+            {
+                Resource resource = getRandomResource();
+                int resourceNumber = (int) resource;
+                resourceCurseCountMutexes[resourceNumber].WaitOne();
+                resourceCursesCount[resourceNumber]++;
+
+                logEvent("Czarownik przeklina fabryke: " + resolveResourceName(resource) + "Liczba klątw: "
+                         + resourceCursesCount[resourceNumber]);
+
+                if (resourceCursesCount[resourceNumber] == 1)
+                {
+                    logEvent("Czarownik przeklina fabryke: " + resolveResourceName(resource) + " po raz pierwszy");
+                    resourceNotCursedMutexes[resourceNumber].WaitOne();
                 }
-                else if (which == sulfur){
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Czarownik czeka na dostep do klatw od "+resolveResourceName(which));
-                    sulfurCurseCountMutex.WaitOne();
-                    sulfurCurseCount++;
-                    if (sulfurCurseCount==1){
-                        sulfurNotCursedMutex.WaitOne();
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Czarownik przeklina fabryke "+resolveResourceName(which)+", klatw: "+sulfurCurseCount);
-                    }
-                    sulfurCurseCountMutex.Release();
-                }
-                else{
-                    System.Console.WriteLine(System.DateTime.Now+" "+"Czarownik czeka na dostep do klatw od "+resolveResourceName(which));
-                    leadCurseCountMutex.WaitOne();
-                    leadCurseCount++;
-                    if (leadCurseCount==1){
-                        leadNotCursedMutex.WaitOne();
-                        System.Console.WriteLine(System.DateTime.Now+" "+"Czarownik przeklina fabryke "+resolveResourceName(which)+", klatw: "+leadCurseCount);
-                    }
-                    leadCurseCountMutex.Release();
-                }
-                int s = r.Next(1,this.warlockMaxSleep);
-                System.Console.WriteLine(System.DateTime.Now+" "+"Czarownik najebal sie, wiec spi "+s+" sekund.");
-                Thread.Sleep(s*1000);
+
+                resourceCurseCountMutexes[resourceNumber].Release();
+
+                int sleepTime = r.Next(1, warlockMaxSleep);
+                logEvent("Czarownik idzie spac na: " + sleepTime + "sekund");
+
+                Thread.Sleep(sleepTime * 1000);
             }
         }
 
-        public void WizardWork (){
+        public void WizardWork()
+        {
             //odpalany co pewien czas
             //poczekaj na mutexie od cursecount
             //zmniejsz wartosc
             //jezeli == 0, signal mutex
-            System.Console.WriteLine(System.DateTime.Now+" "+"Czarodziej startuje.");
-            while(true){
-                for (int i = 1; i < 4;i++){
-                    if (i==lead){
-                        System.Console.WriteLine(System.DateTime.Now+" "+"Czarodziej czeka na dostep do klatw od "+resolveResourceName(i));
-                        leadCurseCountMutex.WaitOne();
-                        int oldCount = leadCurseCount;
-                        leadCurseCount = Math.Max(0,leadCurseCount-1);
-                        System.Console.WriteLine(System.DateTime.Now+" "+"Czarodziej zdejmuje klatwe z fabryki "+resolveResourceName(i)+", wczesniej bylo klatw: "+oldCount);
-                        if(oldCount == 1){
-                            System.Console.WriteLine(System.DateTime.Now+" "+"Czarodziej calkowicie odklina fabryke "+resolveResourceName(i));
-                            leadNotCursedMutex.Release();
-                        }
-                        leadCurseCountMutex.Release();
+            while (true)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    Resource resource = (Resource) i;
 
-                    }
-                    else if (i==mercury){
-                        System.Console.WriteLine(System.DateTime.Now+" "+"Czarodziej czeka na dostep do klatw od "+resolveResourceName(i));
-                        mercuryCurseCountMutex.WaitOne();
-                        int oldCount = mercuryCurseCount;
-                        mercuryCurseCount = Math.Max(0,mercuryCurseCount-1);
-                        System.Console.WriteLine(System.DateTime.Now+" "+"Czarodziej zdejmuje klatwe z fabryki "+resolveResourceName(i)+", wczesniej bylo klatw: "+oldCount);
-                        if(oldCount == 1){
-                            System.Console.WriteLine(System.DateTime.Now+" "+"Czarodziej odklina fabryke "+resolveResourceName(i));
-                            mercuryNotCursedMutex.Release();
-                        }
-                        mercuryCurseCountMutex.Release();
+                    resourceCurseCountMutexes[i].WaitOne();
+                    int oldCurseCount = resourceCursesCount[i];
+                    resourceCursesCount[i] = Math.Max(0, resourceCursesCount[i] - 1);
 
+                    logEvent("Czarodziej zdejmuje klatwe z fabryki " + resolveResourceName(resource)
+                                                                     + ", wczesniej bylo klatw: " + oldCurseCount);
+
+                    if (oldCurseCount == 1)
+                    {
+                        logEvent("Czarodziej odklina fabryke " + resolveResourceName(resource));
+                        resourceNotCursedMutexes[i].Release();
                     }
-                    else{
-                        System.Console.WriteLine(System.DateTime.Now+" "+"Czarodziej czeka na dostep do klatw od "+resolveResourceName(i));
-                        sulfurCurseCountMutex.WaitOne();
-                        int oldCount = sulfurCurseCount;
-                        sulfurCurseCount = Math.Max(0,sulfurCurseCount-1);
-                        System.Console.WriteLine(System.DateTime.Now+" "+"Czarodziej zdejmuje klatwe z fabryki "+resolveResourceName(i)+", wczesniej bylo klatw: "+oldCount);
-                        if(oldCount == 1){
-                            System.Console.WriteLine(System.DateTime.Now+" "+"Czarodziej odklina fabryke "+resolveResourceName(i));
-                            sulfurNotCursedMutex.Release();
-                        }
-                        sulfurCurseCountMutex.Release();
-                    }
+
+                    resourceCurseCountMutexes[i].Release();
                 }
-                int s = r.Next(1,this.wizardMaxSleep);
-                System.Console.WriteLine(System.DateTime.Now+" "+"Czarodziej najebal sie, wiec spi "+s+" sekund.");
-                Thread.Sleep(s*1000);
+
+                int sleepTime = r.Next(1, this.wizardMaxSleep);
+                logEvent("Czarodziej idzie spac na " + sleepTime + " sekund");
+                Thread.Sleep(sleepTime * 1000);
             }
         }
 
-        public void AlchemistAWork(){
-            resourcesMutex.WaitOne();
-            System.Console.WriteLine(System.DateTime.Now+" "+"Alchemik A przyszedl, sprawdza czy ma dostepne zasoby.");
-            if (checkResourcesAlchemist('A')){
-                resourcesMutex.Release();
-                System.Console.WriteLine(System.DateTime.Now+" "+"Alchemik A odchodzi - mial wszystkie zasoby");
+        public void AlchemistAWork()
+        {
+            int alchemistNumber = (int) Alchemist.AlchemistA;
+            changeAlchemistNumber(Alchemist.AlchemistA, 1);
+            logEvent("Alchemik A przyszedl, sprawdza czy ma dostepne zasoby");
+
+            if (checkResourcesAlchemist(Alchemist.AlchemistA))
+            {
+                logEvent("Alchemik A odchodzi - mial wszystkie zasoby");
+                changeAlchemistNumber(Alchemist.AlchemistA, -1);
                 return;
             }
-            resourcesMutex.Release();
-            alchemistACountMutex.WaitOne();
-            alchemistACount++;
-            alchemistACountMutex.Release();
-            alchemistAMutex.WaitOne();
-            System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka zwolnila alchemika A");
-        }
-        public void AlchemistBWork(){
-            resourcesMutex.WaitOne();
-            System.Console.WriteLine(System.DateTime.Now+" "+"Alchemik B przyszedl, sprawdza czy ma dostepne zasoby.");
-            if (checkResourcesAlchemist('B')){
-                resourcesMutex.Release();
-                System.Console.WriteLine(System.DateTime.Now+" "+"Alchemik B odchodzi - mial wszystkie zasoby");
-                return;
-            }
-            resourcesMutex.Release();
-            alchemistBCountMutex.WaitOne();
-            alchemistBCount++;
-            alchemistBCountMutex.Release();
-            alchemistBMutex.WaitOne();
-            System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka zwolnila alchemika B");
-        }
-        public void AlchemistCWork(){
-            resourcesMutex.WaitOne();
-            System.Console.WriteLine(System.DateTime.Now+" "+"Alchemik C przyszedl, sprawdza czy ma dostepne zasoby.");
-            if (checkResourcesAlchemist('C')){
-                resourcesMutex.Release();
-                System.Console.WriteLine(System.DateTime.Now+" "+"Alchemik C odchodzi - mial wszystkie zasoby");
-                return;
-            }
-            resourcesMutex.Release();
-            alchemistCCountMutex.WaitOne();
-            alchemistCCount++;
-            alchemistCCountMutex.Release();
-            alchemistCMutex.WaitOne();
-            System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka zwolnila alchemika C");
-        }
-        public void AlchemistDWork(){
-            resourcesMutex.WaitOne();
-            System.Console.WriteLine(System.DateTime.Now+" "+"Alchemik D przyszedl, sprawdza czy ma dostepne zasoby.");
-            if(checkResourcesAlchemist('D')){
-                resourcesMutex.Release();
-                System.Console.WriteLine(System.DateTime.Now+" "+"Alchemik D odchodzi - mial wszystkie zasoby");
-                return;
-            }
-            resourcesMutex.Release();
-            alchemistDCountMutex.WaitOne();
-            alchemistDCount++;
-            alchemistDCountMutex.Release();
-            alchemistDMutex.WaitOne();
-            System.Console.WriteLine(System.DateTime.Now+" "+"Fabryka zwolnila alchemika D");
+
+            alchemistMutexes[alchemistNumber].WaitOne();
+            checkResourcesAlchemist(Alchemist.AlchemistA);
+            changeAlchemistNumber(Alchemist.AlchemistA, -1);
+            logEvent("Alchemik A został obsluzony przez fabryke");
         }
 
-        private String resolveResourceName (int resource){
-            if (resource == sulfur)
+        public void AlchemistBWork()
+        {
+            int alchemistNumber = (int) Alchemist.AlchemistB;
+            changeAlchemistNumber(Alchemist.AlchemistB, 1);
+            logEvent("Alchemik B przyszedl, sprawdza czy ma dostepne zasoby");
+
+            if (checkResourcesAlchemist(Alchemist.AlchemistB))
+            {
+                logEvent("Alchemik B odchodzi - mial wszystkie zasoby");
+                changeAlchemistNumber(Alchemist.AlchemistB, -1);
+                return;
+            }
+
+            alchemistMutexes[alchemistNumber].WaitOne();
+            checkResourcesAlchemist(Alchemist.AlchemistB);
+            changeAlchemistNumber(Alchemist.AlchemistB, -1);
+            logEvent("Alchemik B został obsluzony przez fabryke");
+        }
+
+        public void AlchemistCWork()
+        {
+            int alchemistNumber = (int) Alchemist.AlchemistC;
+            changeAlchemistNumber(Alchemist.AlchemistC, 1);
+            logEvent("Alchemik C przyszedl, sprawdza czy ma dostepne zasoby");
+
+            if (checkResourcesAlchemist(Alchemist.AlchemistC))
+            {
+                logEvent("Alchemik C odchodzi - mial wszystkie zasoby");
+                changeAlchemistNumber(Alchemist.AlchemistC, -1);
+                return;
+            }
+
+            alchemistMutexes[alchemistNumber].WaitOne();
+            checkResourcesAlchemist(Alchemist.AlchemistC);
+            changeAlchemistNumber(Alchemist.AlchemistC, -1);
+            logEvent("Alchemik C został obsluzony przez fabryke");
+        }
+
+        public void AlchemistDWork()
+        {
+            int alchemistNumber = (int) Alchemist.AlchemistD;
+            changeAlchemistNumber(Alchemist.AlchemistD, 1);
+            logEvent("Alchemik D przyszedl, sprawdza czy ma dostepne zasoby");
+
+            if (checkResourcesAlchemist(Alchemist.AlchemistD))
+            {
+                logEvent("Alchemik D odchodzi - mial wszystkie zasoby");
+                changeAlchemistNumber(Alchemist.AlchemistD, -1);
+                return;
+            }
+
+            alchemistMutexes[alchemistNumber].WaitOne();
+            checkResourcesAlchemist(Alchemist.AlchemistD);
+            changeAlchemistNumber(Alchemist.AlchemistD, -1);
+            logEvent("Alchemik D został obsluzony przez fabryke");
+        }
+
+        private void checkResources()
+        {
+            bool isSulfur = resourceCount[(int) Resource.Sulfur] > 0;
+            bool isLead = resourceCount[(int) Resource.Lead] > 0;
+            bool isMercury = resourceCount[(int) Resource.Mercury] > 0;
+
+
+            if (isSulfur && isLead && isMercury)
+            {
+                //D
+                int alchemistType = (int) Alchemist.AlchemistD;
+                if (alchemistCount[alchemistType] > 0)
+                {
+                    alchemistMutexes[alchemistType].Release();
+                }
+            }
+
+            if (isSulfur && isMercury)
+            {
+                //B
+                int alchemistType = (int) Alchemist.AlchemistB;
+                if (alchemistCount[alchemistType] > 0)
+                {
+                    alchemistMutexes[alchemistType].Release();
+                }
+            }
+
+            if (isMercury && isLead)
+            {
+                //A
+                int alchemistType = (int) Alchemist.AlchemistA;
+                if (alchemistCount[alchemistType] > 0)
+                {
+                    alchemistMutexes[alchemistType].Release();
+                }
+            }
+
+            if (isLead && isSulfur)
+            {
+                //C
+                int alchemistType = (int) Alchemist.AlchemistC;
+                if (alchemistCount[alchemistType] > 0)
+                {
+                    alchemistMutexes[alchemistType].Release();
+                }
+            }
+        }
+
+        private bool checkResourcesAlchemist(Alchemist alchemist)
+        {
+            resourcesMutex.WaitOne();
+            bool isSulfur = resourceCount[(int) Resource.Sulfur] > 0;
+            bool isLead = resourceCount[(int) Resource.Lead] > 0;
+            bool isMercury = resourceCount[(int) Resource.Mercury] > 0;
+
+            if (resourceCount[(int) Resource.Sulfur] < 0 || resourceCount[(int) Resource.Lead] < 0 ||
+                resourceCount[(int) Resource.Mercury] < 0)
+                throw new Exception("Fabryka sprawdzila, zasoby < 0 !");
+
+            int mercuryNumber = (int) Resource.Mercury;
+            int leadNumber = (int) Resource.Lead;
+            int sulfurNumber = (int) Resource.Sulfur;
+
+            if (alchemist == Alchemist.AlchemistA && isMercury && isLead)
+            {
+                resourceCount[mercuryNumber]--;
+                resourceFull[mercuryNumber].Release();
+                resourceCount[leadNumber]--;
+                resourceFull[leadNumber].Release();
+                resourcesMutex.Release();
+                return true;
+            }
+
+            if (alchemist == Alchemist.AlchemistB && isSulfur && isMercury)
+            {
+                resourceCount[sulfurNumber]--;
+                resourceFull[sulfurNumber].Release();
+                resourceCount[mercuryNumber]--;
+                resourceFull[mercuryNumber].Release();
+                resourcesMutex.Release();
+                return true;
+            }
+
+            if (alchemist == Alchemist.AlchemistC && isLead && isSulfur)
+            {
+                resourceCount[leadNumber]--;
+                resourceFull[leadNumber].Release();
+                resourceCount[sulfurNumber]--;
+                resourceFull[sulfurNumber].Release();
+                resourcesMutex.Release();
+                return true;
+            }
+
+            if (alchemist == Alchemist.AlchemistC && isLead && isSulfur && isMercury)
+            {
+                resourceCount[leadNumber]--;
+                resourceFull[leadNumber].Release();
+                resourceCount[sulfurNumber]--;
+                resourceFull[sulfurNumber].Release();
+                resourceCount[mercuryNumber]--;
+                resourceFull[mercuryNumber].Release();
+                resourcesMutex.Release();
+                return true;
+            }
+
+            resourcesMutex.Release();
+            return false;
+        }
+
+        private void changeAlchemistNumber(Alchemist alchemist, int addNumber)
+        {
+            int alchemistNumber = (int) alchemist;
+            alchemistCountMutexes[alchemistNumber].WaitOne();
+            alchemistCount[alchemistNumber] += addNumber;
+            alchemistCountMutexes[alchemistNumber].Release();
+        }
+
+        private Resource getRandomResource()
+        {
+            Array values = Enum.GetValues(typeof(Resource));
+            return (Resource) values.GetValue(r.Next(values.Length));
+        }
+        
+        private Alchemist getRandomAlchemist()
+        {
+            Array values = Enum.GetValues(typeof(Alchemist));
+            return (Alchemist) values.GetValue(r.Next(values.Length));
+        }
+
+        private void logEvent(String eventText)
+        {
+            System.Console.WriteLine(System.DateTime.Now + " " + eventText);
+        }
+
+        private String resolveResourceName(Resource resource)
+        {
+            if (resource == Resource.Sulfur)
                 return "\"siarka\"";
-            else if (resource == lead)
+            else if (resource == Resource.Lead)
                 return "\"olow\"";
 
             return "\"rtec\"";
         }
 
-        private void printAlchemics(){
+        private void printAlchemics()
+        {
             System.Console.WriteLine(System.DateTime.Now + " OCZEKUJACY ALCHEMICY:");
-            System.Console.WriteLine("Alchemicy A - "+this.alchemistACount);
-            System.Console.WriteLine("Alchemicy B - "+this.alchemistBCount);
-            System.Console.WriteLine("Alchemicy C - "+this.alchemistCCount);
-            System.Console.WriteLine("Alchemicy D - "+this.alchemistDCount);
+            System.Console.WriteLine("Alchemicy A - " + alchemistCount[(int) Alchemist.AlchemistA]);
+            System.Console.WriteLine("Alchemicy B - " + alchemistCount[(int) Alchemist.AlchemistB]);
+            System.Console.WriteLine("Alchemicy C - " + alchemistCount[(int) Alchemist.AlchemistC]);
+            System.Console.WriteLine("Alchemicy D - " + alchemistCount[(int) Alchemist.AlchemistD]);
             System.Console.WriteLine(System.DateTime.Now + " ZASOBY:");
-            System.Console.WriteLine("Rtec - "+ this.mercuryCount);
-            System.Console.WriteLine("Siarka - "+ this.sulfurCount);
-            System.Console.WriteLine("Olow - "+ this.leadCount);
+            System.Console.WriteLine("Rtec - " + resourceCount[(int) Resource.Mercury]);
+            System.Console.WriteLine("Siarka - " + resourceCount[(int) Resource.Sulfur]);
+            System.Console.WriteLine("Olow - " + resourceCount[(int) Resource.Lead]);
         }
     }
 }

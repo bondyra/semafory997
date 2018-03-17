@@ -664,23 +664,23 @@
     ]
   },
   "packageFolders": {
-    "/home/jakub/.nuget/packages/": {},
-    "/usr/share/dotnet/sdk/NuGetFallbackFolder": {}
+    "/Users/r.adasiewicz/.nuget/packages/": {},
+    "/usr/local/share/dotnet/sdk/NuGetFallbackFolder": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/home/jakub/semafory/semafory.csproj",
+      "projectUniqueName": "/Users/r.adasiewicz/Documents/dev_my/semafory997/semafory.csproj",
       "projectName": "semafory",
-      "projectPath": "/home/jakub/semafory/semafory.csproj",
-      "packagesPath": "/home/jakub/.nuget/packages/",
-      "outputPath": "/home/jakub/semafory/obj/",
+      "projectPath": "/Users/r.adasiewicz/Documents/dev_my/semafory997/semafory.csproj",
+      "packagesPath": "/Users/r.adasiewicz/.nuget/packages/",
+      "outputPath": "/Users/r.adasiewicz/Documents/dev_my/semafory997/obj/",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
-        "/usr/share/dotnet/sdk/NuGetFallbackFolder"
+        "/usr/local/share/dotnet/sdk/NuGetFallbackFolder"
       ],
       "configFilePaths": [
-        "/home/jakub/.nuget/NuGet/NuGet.Config"
+        "/Users/r.adasiewicz/.config/NuGet/NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "netcoreapp2.0"
@@ -703,6 +703,7 @@
       "netcoreapp2.0": {
         "dependencies": {
           "Microsoft.NETCore.App": {
+            "suppressParent": "All",
             "target": "Package",
             "version": "[2.0.0, )",
             "autoReferenced": true

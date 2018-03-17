@@ -8,3 +8,13 @@
 /home/jakub/semafory/obj/Debug/netcoreapp2.0/semafory.AssemblyInfo.cs
 /home/jakub/semafory/obj/Debug/netcoreapp2.0/semafory.dll
 /home/jakub/semafory/obj/Debug/netcoreapp2.0/semafory.pdb
+/Users/r.adasiewicz/Documents/dev_my/semafory997/bin/Debug/netcoreapp2.0/semafory.deps.json
+/Users/r.adasiewicz/Documents/dev_my/semafory997/bin/Debug/netcoreapp2.0/semafory.runtimeconfig.json
+/Users/r.adasiewicz/Documents/dev_my/semafory997/bin/Debug/netcoreapp2.0/semafory.runtimeconfig.dev.json
+/Users/r.adasiewicz/Documents/dev_my/semafory997/bin/Debug/netcoreapp2.0/semafory.dll
+/Users/r.adasiewicz/Documents/dev_my/semafory997/bin/Debug/netcoreapp2.0/semafory.pdb
+/Users/r.adasiewicz/Documents/dev_my/semafory997/obj/Debug/netcoreapp2.0/semafory.csproj.CoreCompileInputs.cache
+/Users/r.adasiewicz/Documents/dev_my/semafory997/obj/Debug/netcoreapp2.0/semafory.AssemblyInfoInputs.cache
+/Users/r.adasiewicz/Documents/dev_my/semafory997/obj/Debug/netcoreapp2.0/semafory.AssemblyInfo.cs
+/Users/r.adasiewicz/Documents/dev_my/semafory997/obj/Debug/netcoreapp2.0/semafory.dll
+/Users/r.adasiewicz/Documents/dev_my/semafory997/obj/Debug/netcoreapp2.0/semafory.pdb
