@@ -228,15 +228,14 @@ namespace semafory
         public void AlchemistAWork()
         {
             int alchemistNumber = (int) Alchemist.AlchemistA;
-            changeAlchemistNumber(Alchemist.AlchemistA, 1);
             logEvent("Alchemik A przyszedł, sprawdza czy ma dostępne zasoby");
-
             if (checkResourcesAlchemist(Alchemist.AlchemistA))
             {
                 logEvent("Alchemik A odchodzi - wziął wszystkie zasoby");
-                changeAlchemistNumber(Alchemist.AlchemistA, -1);
                 return;
             }
+            
+            changeAlchemistNumber(Alchemist.AlchemistA, 1);
             logEvent("Alchemik A nie ma zasobów - oczekuje na obsługę");
             alchemistMutexes[alchemistNumber].WaitOne();
             changeAlchemistNumber(Alchemist.AlchemistA, -1);
@@ -245,16 +244,15 @@ namespace semafory
         public void AlchemistBWork()
         {
             int alchemistNumber = (int) Alchemist.AlchemistB;
-            changeAlchemistNumber(Alchemist.AlchemistB, 1);
             logEvent("Alchemik B przyszedł, sprawdza czy ma dostępne zasoby");
 
             if (checkResourcesAlchemist(Alchemist.AlchemistB))
             {
                 logEvent("Alchemik B odchodzi - wziął wszystkie zasoby");
-                changeAlchemistNumber(Alchemist.AlchemistB, -1);
                 return;
             }
-
+            
+            changeAlchemistNumber(Alchemist.AlchemistB, 1);
             logEvent("Alchemik B nie ma zasobów - oczekuje na obsługę");
             alchemistMutexes[alchemistNumber].WaitOne();
             changeAlchemistNumber(Alchemist.AlchemistB, -1);
@@ -263,16 +261,15 @@ namespace semafory
         public void AlchemistCWork()
         {
             int alchemistNumber = (int) Alchemist.AlchemistC;
-            changeAlchemistNumber(Alchemist.AlchemistC, 1);
             logEvent("Alchemik C przyszedł, sprawdza czy ma dostępne zasoby");
 
             if (checkResourcesAlchemist(Alchemist.AlchemistC))
             {
                 logEvent("Alchemik C odchodzi - wziął wszystkie zasoby");
-                changeAlchemistNumber(Alchemist.AlchemistC, -1);
                 return;
             }
 
+            changeAlchemistNumber(Alchemist.AlchemistC, 1);
             logEvent("Alchemik C nie ma zasobów - oczekuje na obsługę");
             alchemistMutexes[alchemistNumber].WaitOne();
             changeAlchemistNumber(Alchemist.AlchemistC, -1);
@@ -281,16 +278,15 @@ namespace semafory
         public void AlchemistDWork()
         {
             int alchemistNumber = (int) Alchemist.AlchemistD;
-            changeAlchemistNumber(Alchemist.AlchemistD, 1);
             logEvent("Alchemik D przyszedł, sprawdza czy ma dostępne zasoby");
 
             if (checkResourcesAlchemist(Alchemist.AlchemistD))
             {
                 logEvent("Alchemik D odchodzi - wziął wszystkie zasoby");
-                changeAlchemistNumber(Alchemist.AlchemistD, -1);
                 return;
             }
 
+            changeAlchemistNumber(Alchemist.AlchemistD, 1);
             logEvent("Alchemik D nie ma zasobów - oczekuje na obsługę");
             alchemistMutexes[alchemistNumber].WaitOne();
             changeAlchemistNumber(Alchemist.AlchemistD, -1);
