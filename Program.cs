@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading;
 
 namespace semafory
@@ -295,6 +296,44 @@ namespace semafory
             changeAlchemistNumber(Alchemist.AlchemistD, -1);
         }
 
+        private List<Resource>[] neededResourcesByAlchemist = new List<Resource>[]
+        {
+            new List<Resource> {Resource.Mercury, Resource.Lead}, //A
+            new List<Resource> {Resource.Sulfur, Resource.Mercury}, //B
+            new List<Resource> {Resource.Lead, Resource.Sulfur}, //C
+            new List<Resource> {Resource.Lead, Resource.Mercury, Resource.Sulfur} //D
+        };
+        
+        private bool CheckAvailabilityForAlchemist(Alchemist alchemist, bool isSulfur, bool isLead, bool isMercury)
+        {
+            bool ret = true;
+
+            foreach(var res in neededResourcesByAlchemist[(int)alchemist])
+            {
+                if (res == Resource.Sulfur)
+                    ret = ret && isSulfur;
+                if (res == Resource.Lead)
+                    ret = ret && isLead;
+                if (res == Resource.Mercury)
+                    ret = ret && isMercury;
+            }
+
+            return ret;
+        }
+        private void CheckAvailabilityAndGiveResources(Alchemist alchemist, bool isSulfur, bool isLead, bool isMercury, Resource factoryType)
+        {
+            if(CheckAvailabilityForAlchemist(alchemist, isSulfur, isLead, isMercury))
+            {
+                int alchemistType = (int)alchemist;
+                if (alchemistCount[alchemistType] > 0)
+                {
+                    alchemistMutexes[alchemistType].Release();
+                    logEvent("Fabryka " + resolveResourceName(factoryType) + " wybiera zasoby dla alchemika" + alchemist.ToString());
+                    acquireResources(alchemist);
+                }
+            }
+        }
+
         //procedura wybierania alchemika z kolejki i dawania mu zasobów, uruchamiana przez fabrykę po wyprodukowaniu surowca
         //uruchamiana wewnątrz mutexu resourcesMutex!
         private void checkAndSignalAlchemics(Resource resource)
@@ -307,62 +346,23 @@ namespace semafory
                 resourceCount[(int) Resource.Mercury] < 0)
                 throw new Exception("Zasoby < 0 !");
 
-            if (isSulfur && isLead && isMercury)
-            {
-                //D
-                int alchemistType = (int) Alchemist.AlchemistD;
-                if (alchemistCount[alchemistType] > 0)
-                {
-                    alchemistMutexes[alchemistType].Release();
-                    logEvent("Fabryka "+resolveResourceName(resource)+" wybiera zasoby dla alchemika D");
-                    acquireResources(Alchemist.AlchemistD);
-                }
-            }
-            //potrzebne bo zasoby pewnie sie zmienily (todo: przepisanie by bylo prosciej?)
-            isSulfur = resourceCount[(int) Resource.Sulfur] > 0;
-            isLead = resourceCount[(int) Resource.Lead] > 0;
-            isMercury = resourceCount[(int) Resource.Mercury] > 0;
+            Tuple<int, int>[] currentAlchemistCounts = new Tuple<int, int>[4]; // tablica alchemist, alchemistcount
 
-            if (isSulfur && isMercury)
+            for(int i =0; i<alchemistCount.Length; i++)
             {
-                //B
-                int alchemistType = (int) Alchemist.AlchemistB;
-                if (alchemistCount[alchemistType] > 0)
-                {
-                    alchemistMutexes[alchemistType].Release();
-                    logEvent("Fabryka "+resolveResourceName(resource)+" wybiera zasoby dla alchemika B");
-                    acquireResources(Alchemist.AlchemistB);
-                }
+                alchemistCountMutexes[i].WaitOne();
+                currentAlchemistCounts[i] = new Tuple<int, int>(i, alchemistCount[i]);
+                alchemistCountMutexes[i].Release();
             }
 
-            isSulfur = resourceCount[(int) Resource.Sulfur] > 0;
-            isMercury = resourceCount[(int) Resource.Mercury] > 0;
+            Array.Sort(currentAlchemistCounts, (x, y) => y.Item2.CompareTo(x.Item2));
 
-            if (isMercury && isLead)
+            for(int i=0; i< currentAlchemistCounts.Length; i++)
             {
-                //A
-                int alchemistType = (int) Alchemist.AlchemistA;
-                if (alchemistCount[alchemistType] > 0)
-                {
-                    alchemistMutexes[alchemistType].Release();
-                    logEvent("Fabryka "+resolveResourceName(resource)+" wybiera zasoby dla alchemika A");
-                    acquireResources(Alchemist.AlchemistA);
-                }
-            }
-
-            isLead = resourceCount[(int) Resource.Lead] > 0;
-            isMercury = resourceCount[(int) Resource.Mercury] > 0;
-
-            if (isLead && isSulfur)
-            {
-                //C
-                int alchemistType = (int) Alchemist.AlchemistC;
-                if (alchemistCount[alchemistType] > 0)
-                {
-                    alchemistMutexes[alchemistType].Release();
-                    logEvent("Fabryka "+resolveResourceName(resource)+" wybiera zasoby dla alchemika C");
-                    acquireResources(Alchemist.AlchemistC);
-                }
+                CheckAvailabilityAndGiveResources((Alchemist)currentAlchemistCounts[i].Item1, isSulfur, isLead, isMercury, resource);
+                isSulfur = resourceCount[(int)Resource.Sulfur] > 0;
+                isLead = resourceCount[(int)Resource.Lead] > 0;
+                isMercury = resourceCount[(int)Resource.Mercury] > 0;
             }
         }
 
